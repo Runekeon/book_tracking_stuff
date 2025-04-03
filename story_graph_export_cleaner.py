@@ -4,32 +4,25 @@ import argparse
 import logging
 import pandas as pd
 
-# Configure logging
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
-# Create a logger object
-logger = logging.getLogger(__name__)
-
 
 class StoryGraphExportCleaner:
     ''' Convert a "The Story Graph" export CSV to DataFrame '''
-    def __init__(self, input_file, output_file=None, debug=False):
+    def __init__(self, input_file, output_file, log_level='INFO'):
+        logging.basicConfig(
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(log_level)
         self.input_file = input_file
         self.output_file = output_file or input_file.replace("csv", "json")
-        self.debug = debug
         self.df = None
-
-        # Set logging level based on debug flag
-        if self.debug:
-            logging.basicConfig(level=logging.DEBUG)
-        else:
-            logging.basicConfig(level=logging.INFO)
 
     def split_content_warnings(self, row):
         ''' Convert contentWarnings dict into 3 separate columns '''
         cw_graphic = []
         cw_moderate = []
         cw_minor = []
-        logging.debug(
+        self.logger.debug(
             "Processing row for content warnings: %s",
             row['contentWarnings']
         )
@@ -60,10 +53,10 @@ class StoryGraphExportCleaner:
         my_dict = {}
         if isinstance(test_note, str):
             for line in test_note.split(";"):
-                logging.debug('line: %s', line)
+                self.logger.debug('line: %s', line)
                 if ':' in line:
                     stuff = line.replace('\n', '').replace('\r', '').split(":")
-                    logging.debug('stuff: %s', stuff)
+                    self.logger.debug('stuff: %s', stuff)
                     my_dict[stuff[0].strip()] = [
                         x.strip() for x in stuff[1].split(',')
                     ]
@@ -71,7 +64,7 @@ class StoryGraphExportCleaner:
 
     def process_file(self):
         ''' Pre-process file for import '''
-        logging.info("Processing file: %s", self.input_file)
+        self.logger.info("Processing file: %s", self.input_file)
         self.df = pd.read_csv(self.input_file)
         self.df.rename(columns={
             'Character- or Plot-Driven?': 'driver',
@@ -139,13 +132,13 @@ class StoryGraphExportCleaner:
             lambda x: [item.strip() for item in x]
         )
         self.df['Owned?'] = self.df['Owned?'].astype('string')
-        logging.debug("Processed DataFrame:\n%s", self.df.head())
+        self.logger.debug("Processed df.iloc[0]:\n%s", self.df.iloc[0])
         return self.df
 
     def save_to_json(self):
         ''' Save the DataFrame to a JSON file '''
         self.df.to_json(self.output_file, orient='records', lines=True)
-        logging.info("DataFrame saved to JSON file: %s", self.output_file)
+        self.logger.info("DataFrame saved to JSON file: %s", self.output_file)
 
 
 if __name__ == '__main__':
@@ -162,13 +155,17 @@ if __name__ == '__main__':
         " change the csv in required filename parameter to json"
     )
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug logging",
+        '--log',
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        default='INFO',
+        help='Set the logging level (default: INFO)'
     )
     args = parser.parse_args()
-
-    cleaner = StoryGraphExportCleaner(args.filename, args.outfile, args.debug)
+    # process directory
+    cleaner = StoryGraphExportCleaner(
+        args.filename,
+        args.outfile,
+        args.log.upper()
+    )
     cleaner.process_file()
-    logging.info('Output file will be: %s', cleaner.output_file)
     cleaner.save_to_json()
